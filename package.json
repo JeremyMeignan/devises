@@ -1,7 +1,7 @@
 {
 	"name": "n8n-nodes-devises",
 	"version": "0.1.0",
-	"description": "n8n community node for Frankfurter currency exchange rates",
+	"description": "n8n community node for Currency Exchange rates",
 	"license": "MIT",
 	"homepage": "https://github.com/TON_COMPTE_GITHUB/devises#readme",
 	"keywords": [
@@ -31,7 +31,7 @@
 	"n8nNodesApiVersion": 1,
 	"strict": true,
 	"nodes": [
-		"dist/nodes/Frankfurter/Frankfurter.node.js"
+		"dist/nodes/CurrencyExchange/CurrencyExchange.node.js"
 	]
 	}
 	,

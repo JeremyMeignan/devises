@@ -1,8 +1,6 @@
 import type {
 	IExecuteFunctions,
-	ILoadOptionsFunctions,
 	INodeExecutionData,
-	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -15,43 +13,47 @@ type FrankfurterRate = {
 	rate: number;
 };
 
-type FrankfurterCurrency = {
-	iso_code: string;
-	name: string;
-};
+function normalizeDate(value: unknown): string {
+	const trimmedValue = typeof value === 'string' ? value.trim() : '';
+	const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmedValue);
 
-type TargetCurrencyCollection = {
-	target?: Array<{
-		currency?: string;
-	}>;
-};
+	if (match) {
+		return `${match[3]}-${match[2]}-${match[1]}`;
+	}
 
-export class Frankfurter implements INodeType {
+	return trimmedValue;
+}
+
+export class CurrencyExchange implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Frankfurter',
-		name: 'frankfurter',
-		icon: { light: 'file:frankfurter.svg', dark: 'file:frankfurter.dark.svg' },
+		displayName: 'Currency Exchange',
+		name: 'currencyExchange',
+		icon: {
+			light: 'file:CurrencyExchange.svg',
+			dark: 'file:CurrencyExchange.dark.svg',
+		},
 		group: ['transform'],
 		version: 1,
 		description: 'Convert a price to one or more currencies',
 		subtitle: '={{ $parameter["amount"] + " " + $parameter["from"] }}',
 		defaults: {
-			name: 'Frankfurter',
+			name: 'Currency Exchange',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		usableAsTool: true,
 		properties: [
 			{
-				displayName: 'Source Currency Name or ID',
+				displayName: 'Source Currency Code',
 				name: 'from',
-				type: 'options',
+				type: 'string',
 				typeOptions: {
-					loadOptionsMethod: 'getCurrencies',
+					ai: true,
 				},
 				default: 'EUR',
 				required: true,
-				description: 'Currency of the price to convert. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description:
+					'Enter the three-letter ISO 4217 code of the currency to convert from, for example EUR, USD, GBP or JPY.',
 			},
 			{
 				displayName: 'Price',
@@ -64,62 +66,41 @@ export class Frankfurter implements INodeType {
 			{
 				displayName: 'Target Currencies',
 				name: 'targets',
-				type: 'fixedCollection',
-				placeholder: 'Add Target Currency',
+				type: 'string',
+				placeholder: 'USD, JPY, CHF',
 				typeOptions: {
-					multipleValues: true,
+					ai: true,
 				},
-				default: {
-					target: [{ currency: 'USD' }],
-				},
-				options: [
-					{
-						displayName: 'Target Currency',
-						name: 'target',
-						values: [
-							{
-								displayName: 'Currency Name or ID',
-								name: 'currency',
-								type: 'options',
-								typeOptions: {
-									loadOptionsMethod: 'getCurrencies',
-								},
-								default: 'USD',
-								required: true,
-								description: 'Currency to convert the price into. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-							},
-						],
-					},
-				],
+				default: '',
+				required: true,
+				description:
+					'Enter one or more target currency codes separated by commas. Examples: USD (US dollar), JPY (Japanese yen), CHF (Swiss franc), GBP (British pound), CAD (Canadian dollar).',
 			},
 			{
-				displayName: 'Date',
-				name: 'date',
+				displayName: 'Start Date',
+				name: 'startDate',
 				type: 'string',
 				default: '',
-				placeholder: 'YYYY-MM-DD',
-				description: 'Exchange-rate date; leave empty for the latest available rate',
+				placeholder: 'DD/MM/YYYY or YYYY-MM-DD',
+				typeOptions: {
+					ai: true,
+				},
+				description:
+					'Optional start of the exchange-rate period. Leave empty to use today. Enter DD/MM/YYYY or YYYY-MM-DD.',
+			},
+			{
+				displayName: 'End Date',
+				name: 'endDate',
+				type: 'string',
+				default: '',
+				placeholder: 'DD/MM/YYYY or YYYY-MM-DD',
+				typeOptions: {
+					ai: true,
+				},
+				description:
+					'Optional end of the exchange-rate period. Leave empty to retrieve the rate for the start date only. Enter DD/MM/YYYY or YYYY-MM-DD.',
 			},
 		],
-	};
-
-	methods = {
-		loadOptions: {
-			async getCurrencies(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const currencies = (await this.helpers.httpRequest({
-					method: 'GET',
-					url: 'https://api.frankfurter.dev/v2/currencies',
-					json: true,
-				})) as FrankfurterCurrency[];
-
-				return currencies
-					.map((currency) => ({
-						name: `${currency.iso_code} — ${currency.name}`,
-						value: currency.iso_code,
-					}))
-					.sort((a, b) => a.name.localeCompare(b.name));
-			},
-		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -129,19 +110,25 @@ export class Frankfurter implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				const from = (this.getNodeParameter('from', itemIndex) as string).trim().toUpperCase();
+				const from = (this.getNodeParameter('from', itemIndex) as string)
+					.trim()
+					.toUpperCase();
 				const amount = this.getNodeParameter('amount', itemIndex) as number;
-				const date = (this.getNodeParameter('date', itemIndex, '') as string).trim();
-				const targets = this.getNodeParameter(
-					'targets',
-					itemIndex,
-					{},
-				) as TargetCurrencyCollection;
-
+				const requestedStartDate = normalizeDate(
+					this.getNodeParameter('startDate', itemIndex, ''),
+				);
+				const requestedEndDate = normalizeDate(
+					this.getNodeParameter('endDate', itemIndex, ''),
+				);
+				const today = new Date().toISOString().slice(0, 10);
+				const startDate = requestedStartDate || today;
+				const endDate = requestedEndDate || startDate;
+				const targetCodes = (this.getNodeParameter('targets', itemIndex) as string).trim();
 				const targetCurrencies = [
 					...new Set(
-						(targets.target ?? [])
-							.map(({ currency }) => currency?.trim().toUpperCase() ?? '')
+						targetCodes
+							.split(',')
+							.map((currency) => currency.trim().toUpperCase())
 							.filter(Boolean),
 					),
 				];
@@ -149,7 +136,7 @@ export class Frankfurter implements INodeType {
 				if (!currencyCodePattern.test(from)) {
 					throw new NodeOperationError(
 						this.getNode(),
-						'Select a valid three-letter source currency code.',
+						'Enter a valid three-letter source currency code.',
 						{ itemIndex },
 					);
 				}
@@ -165,7 +152,7 @@ export class Frankfurter implements INodeType {
 				if (targetCurrencies.length === 0) {
 					throw new NodeOperationError(
 						this.getNode(),
-						'Add at least one target currency.',
+						'Enter at least one target currency code.',
 						{ itemIndex },
 					);
 				}
@@ -178,13 +165,38 @@ export class Frankfurter implements INodeType {
 					);
 				}
 
+				const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+				if (!datePattern.test(startDate) || (endDate && !datePattern.test(endDate))) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Start and end dates must use DD/MM/YYYY or YYYY-MM-DD format.',
+						{ itemIndex },
+					);
+				}
+
+				const startTimestamp = Date.parse(`${startDate}T00:00:00Z`);
+				const endTimestamp = Date.parse(`${endDate}T00:00:00Z`);
+				if (
+					Number.isNaN(startTimestamp) ||
+					Number.isNaN(endTimestamp) ||
+					startDate > endDate
+				) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Enter a valid date range where the start date is before or equal to the end date.',
+						{ itemIndex },
+					);
+				}
+
 				const rates = (await this.helpers.httpRequest({
 					method: 'GET',
 					url: 'https://api.frankfurter.dev/v2/rates',
 					qs: {
 						base: from,
 						quotes: targetCurrencies.join(','),
-						...(date ? { date } : {}),
+						...(requestedEndDate
+							? { from: startDate, to: endDate }
+							: { date: startDate }),
 					},
 					json: true,
 				})) as FrankfurterRate[];
@@ -197,19 +209,7 @@ export class Frankfurter implements INodeType {
 					);
 				}
 
-				const ratesByCurrency = new Map(rates.map((rate) => [rate.quote, rate]));
-
-				for (const targetCurrency of targetCurrencies) {
-					const rate = ratesByCurrency.get(targetCurrency);
-
-					if (!rate) {
-						throw new NodeOperationError(
-							this.getNode(),
-							`No exchange rate is available for ${from} to ${targetCurrency}.`,
-							{ itemIndex },
-						);
-					}
-
+				for (const rate of rates) {
 					returnData.push({
 						json: {
 							...items[itemIndex].json,
