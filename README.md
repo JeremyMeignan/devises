@@ -6,11 +6,28 @@ Aucune clé API n’est nécessaire.
 
 ## Fonctionnalités
 
-- Choisir une devise de départ dans une liste actualisée par Frankfurter.
+- Saisir un code de devise de départ, par exemple `EUR`.
 - Saisir un prix à convertir.
-- Ajouter plusieurs devises de sortie.
-- Obtenir un élément n8n par devise cible.
-- Consulter le dernier taux disponible ou un taux historique à une date donnée.
+- Ajouter plusieurs devises cibles séparées par des virgules, par exemple `USD, GBP, JPY`.
+- Obtenir un élément n8n par devise cible et par date.
+- Consulter le taux d'un jour précis ou récupérer des valeurs étalées sur une période.
+
+## Valeurs sur une période
+
+Les champs `Start Date` et `End Date` permettent de récupérer les taux de change
+sur une période complète. Les dates peuvent être saisies au format `DD/MM/YYYY`
+ou `YYYY-MM-DD`.
+
+Exemple :
+
+- Date de début : `12/09/2025`
+- Date de fin : `12/09/2026`
+
+Le nœud interroge l'API Frankfurter pour chaque date disponible dans cette
+période et renvoie un élément n8n pour chaque date et chaque devise cible.
+
+Si seule la date de début est renseignée, le nœud renvoie le taux de cette
+date. Si les deux dates sont vides, la date du jour est utilisée.
 
 ## Exemple
 
@@ -18,9 +35,13 @@ Avec les paramètres suivants :
 
 - Devise de départ : `EUR`
 - Prix : `100`
-- Devises cibles : `USD`, `GBP`, `JPY`
+- Devises cibles : `USD, GBP, JPY`
+- Date de début : `12/09/2025`
+- Date de fin : `12/09/2026`
 
-Le nœud renvoie trois éléments : un pour le dollar américain, un pour la livre sterling et un pour le yen japonais.
+Pour une seule date, le nœud renvoie trois éléments : un pour le dollar
+américain, un pour la livre sterling et un pour le yen japonais. Pour une
+période, il renvoie ces mêmes devises pour chaque date disponible.
 
 Chaque élément contient :
 
