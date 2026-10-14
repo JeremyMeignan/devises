@@ -13,7 +13,7 @@
 	},
 	"repository": {
 	"type": "git",
-	"url": "git+https://github.com/TON_COMPTE_GITHUB/devises.git"
+	"url": "git+https://github.com/jeremymeignan/devises.git"
 	},
 	"scripts": {
 		"build": "n8n-node build",
